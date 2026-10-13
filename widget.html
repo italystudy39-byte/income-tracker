@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0B0F19">
+  <title>Road to 120M</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <!-- Мини-виджет прогресса. Берёт данные из LocalStorage основного трекера (тот же браузер, та же папка). -->
+  <script src="script.js"></script>
+</head>
+<body>
+  <script>
+    (function () {
+      const style = document.createElement('style');
+      style.textContent = WIDGET_CSS;
+      document.head.appendChild(style);
+
+      function paint() {
+        // только чтение: виджет ничего не записывает в хранилище
+        let state = Store.fresh();
+        for (const key of [Store.key, Store.backupKey]) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) { state = Store.validate(JSON.parse(raw)); break; }
+          } catch (_) { /* пробуем резервную копию */ }
+        }
+        App.state = state;
+        document.body.innerHTML = widgetMarkup(App.stats());
+      }
+      paint();
+      // мгновенное обновление, когда в трекере добавляют доход
+      window.addEventListener('storage', (e) => { if (e.key === Store.key) paint(); });
+      // страховка и смена даты
+      setInterval(paint, 30000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) paint(); });
+    })();
+  </script>
+</body>
+</html>
