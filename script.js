@@ -100,6 +100,7 @@ function isoToDay(s) { const [y, m, d] = s.split('-').map(Number); return Date.U
 function dayToISO(day) { const d = new Date(day * DAY_MS); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
 function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function daysBetween(a, b) { return isoToDay(b) - isoToDay(a); }
+const ETA_MAX_DAYS = 36525; // 100 лет: дальше прогноз даты не показываем
 function addDaysISO(s, n) { return dayToISO(isoToDay(s) + n); }
 function formatDate(s) { const [y, m, d] = s.split('-'); return `${d}.${m}.${y}`; }
 function formatDateLong(s) { const [y, m, d] = s.split('-').map(Number); return `${d} ${MONTHS_GEN[m - 1]} ${y}`; }
@@ -1251,7 +1252,10 @@ function initStage2(App) {
     const eta = (rate) => {
       if (s.remaining === 0) return 'done';
       if (rate <= 0) return null;
-      return addDaysISO(today < CONFIG.startDate ? CONFIG.startDate : today, Math.ceil(s.remaining / rate));
+      const days = Math.ceil(s.remaining / rate);
+      // при очень низком темпе дата уходит за пределы разумного (и 5+-значный год ломает сравнение строк)
+      if (!Number.isFinite(days) || days > ETA_MAX_DAYS) return 'far';
+      return addDaysISO(today < CONFIG.startDate ? CONFIG.startDate : today, days);
     };
     const cats = categoryTotals();
     const catCounts = Object.fromEntries(CATEGORIES.map(c => [c.id, 0]));
@@ -1360,6 +1364,7 @@ function initStage2(App) {
       fv.textContent = formatMoney(a.projectAll);
       fv.className = 'stat-value ' + (a.projectAll >= CONFIG.goal ? 'good' : 'warn');
       $('#s2ForecastHint').textContent = a.etaAll === 'done' ? 'Цель уже достигнута' :
+        a.etaAll === 'far' ? 'При текущем темпе цель дальше 100 лет' :
         a.etaAll ? `Цель по текущему темпу: ${formatDate(a.etaAll)}` : '';
     }
 
@@ -1395,12 +1400,14 @@ function initStage2(App) {
       kpi('Главный источник', topCat ? escapeHtml(topCat.name) : '—', topCat ? `${pct1(a.cats[topCat.id], a.earned)} дохода` : ''),
     ].join('');
 
-    const etaText = (e) => e === 'done' ? 'Достигнута' : e ? formatDate(e) : '—';
-    const etaCls = (e) => e === 'done' || (e && e <= CONFIG.endDate) ? 'good' : e ? 'bad' : '';
+    const etaText = (e) => e === 'done' ? 'Достигнута' : e === 'far' ? 'Более 100 лет' : e ? formatDate(e) : '—';
+    const etaCls = (e) => e === 'done' || (e && e !== 'far' && e <= CONFIG.endDate) ? 'good' : e ? 'bad' : '';
+    const etaSub = (e) => !e ? (a.earned ? '' : 'Нет данных о доходах') : e === 'done' ? '' :
+      e === 'far' ? 'Темп слишком низкий' : e <= CONFIG.endDate ? 'Успеваете к дедлайну' : 'Позже дедлайна';
     $('#s2Forecast').innerHTML = [
       kpi('Прогноз по среднему темпу', a.earned ? formatMoney(a.projectAll) : '—', a.earned ? `${pct1(a.projectAll, CONFIG.goal)} цели` : '', a.projectAll >= CONFIG.goal ? 'good' : ''),
       kpi('Прогноз по темпу 30 дней', a.earned ? formatMoney(a.project30) : '—', a.earned ? `${pct1(a.project30, CONFIG.goal)} цели` : '', a.project30 >= CONFIG.goal ? 'good' : ''),
-      kpi('Дата достижения цели', etaText(a.etaAll), a.etaAll && a.etaAll !== 'done' ? (a.etaAll <= CONFIG.endDate ? 'Успеваете к дедлайну' : 'Позже дедлайна') : '', etaCls(a.etaAll)),
+      kpi('Дата достижения цели', etaText(a.etaAll), etaSub(a.etaAll), etaCls(a.etaAll)),
       kpi('Отклонение от плана', signed(a.earned - a.planToDate), `План на сегодня: ${formatMoney(a.planToDate)}`, a.earned >= a.planToDate ? 'good' : 'bad'),
     ].join('');
     $('#s2ForecastNote').textContent = a.earned === 0
@@ -1472,6 +1479,10 @@ function initStage2(App) {
     if (s.remaining === 0) { out.innerHTML = '<strong class="accent">Цель уже достигнута 🏆</strong>'; return; }
     const startFrom = s.today < CONFIG.startDate ? CONFIG.startDate : s.today;
     const days = Math.ceil(s.remaining * 1461 / (perMonth * 48));
+    if (days > ETA_MAX_DAYS) {
+      out.innerHTML = '<strong class="bad-text">С таким доходом цель займёт больше 100 лет</strong>';
+      return;
+    }
     const eta = addDaysISO(startFrom, days);
     const months = Math.ceil(s.remaining / perMonth);
     const inTime = eta <= CONFIG.endDate;
