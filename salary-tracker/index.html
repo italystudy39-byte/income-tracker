@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Учёт доходов и расходов</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: summary strip, then charts row, then form + journal; single column on phones */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --surface-2: #e9eee8;
+  --fg: #18211c;
+  --muted: #5c6a62;
+  --line: #d5ddd6;
+  --accent: #1f5c4a;
+  --income: #1d8a5b;
+  --expense: #c4492f;
+  --income-soft: #dcf0e5;
+  --expense-soft: #f8e1da;
+  --save: #3b5ba5;
+  --save-soft: #e3e9f7;
+  --font-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --font-body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111613; --surface: #1a211d; --surface-2: #232c27; --fg: #e7ede9; --muted: #9aa9a0;
+    --line: #2f3a34; --accent: #7cc8a8; --income: #4cc58d; --expense: #f07a5e;
+    --income-soft: #1d3a2b; --expense-soft: #42241d; --save: #93abf0; --save-soft: #222b44; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111613; --surface: #1a211d; --surface-2: #232c27; --fg: #e7ede9; --muted: #9aa9a0;
+  --line: #2f3a34; --accent: #7cc8a8; --income: #4cc58d; --expense: #f07a5e;
+  --income-soft: #1d3a2b; --expense-soft: #42241d; --save: #93abf0; --save-soft: #222b44; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+h1, h2 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(1.3rem, 3vw, 1.75rem); letter-spacing: -0.01em; }
+h2 { font-size: 0.95rem; font-weight: 500; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+header p { margin: 4px 0 0; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+span.lbl { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; margin-bottom: 4px; }
+.controls .seg { padding: 4px; }
+label.lbl { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; margin-bottom: 4px; }
+input, select, button { font: inherit; color: inherit; }
+input, select {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0;
+}
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; }
+button:hover { background: var(--surface-2); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { border-color: transparent; background: transparent; padding: 6px 8px; color: var(--muted); }
+button.ghost:hover { color: var(--fg); background: var(--surface-2); }
+button.danger { color: var(--expense); }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.view { display: grid; gap: 20px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; background: transparent; padding: 10px 16px; margin-bottom: -1px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tab-badge { margin-left: 8px; font-size: 0.8rem; color: var(--save); font-weight: 600; }
+.stat { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; border: 1px solid var(--line); }
+.stat .lbl { margin: 0; }
+.stat .val { font-family: var(--font-display); font-size: clamp(1.1rem, 2.6vw, 1.6rem); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .sub { font-size: 0.85rem; color: var(--muted); }
+.stat.inc .val { color: var(--income); }
+.stat.exp .val { color: var(--expense); }
+.stat.sav .val { color: var(--save); }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; display: grid; gap: 14px; align-content: start; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chart-box { position: relative; height: 280px; }
+.empty { color: var(--muted); text-align: center; padding: 30px 10px; }
+
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.seg button[data-type="income"][aria-pressed="true"] { color: var(--income); }
+.seg button[data-type="expense"][aria-pressed="true"] { color: var(--expense); }
+
+form.entry-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+form.entry-form .full { grid-column: 1 / -1; }
+.hint { font-size: 0.85rem; color: var(--save); }
+.seg button[data-type="deposit"][aria-pressed="true"] { color: var(--save); }
+.seg button[data-type="withdraw"][aria-pressed="true"] { color: var(--expense); }
+.goals { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.goal { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; background: var(--bg); align-content: start; min-width: 0; }
+.goal.confirming { background: var(--expense-soft); }
+.goal-name { font-weight: 600; overflow-wrap: anywhere; }
+.goal-bal { font-family: var(--font-display); font-size: 1.15rem; color: var(--save); }
+.goal .sub { font-size: 0.82rem; color: var(--muted); }
+.progress { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
+.progress > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--save) 65%, #fff), var(--save) 60%, color-mix(in srgb, var(--save) 80%, #000)); }
+.goal-actions { display: flex; flex-wrap: wrap; gap: 0; margin-left: -6px; }
+.goal-actions button { padding: 4px 6px; font-size: 0.9rem; }
+.goal-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.rule { background: var(--save-soft); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+.rule-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.rule-row > div { flex: 1 1 120px; min-width: 0; }
+.check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--save); }
+.pill.deposit { background: var(--save-soft); color: var(--save); }
+.pill.withdraw { background: var(--expense-soft); color: var(--expense); }
+td.amt.deposit { color: var(--save); }
+td.amt.withdraw { color: var(--expense); }
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.err { color: var(--expense); font-size: 0.85rem; min-height: 1.2em; }
+
+.journal-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.journal-filters > * { flex: 1 1 140px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td.amt { text-align: right; white-space: nowrap; font-weight: 600; }
+th.amt { text-align: right; }
+td.amt.income { color: var(--income); }
+td.amt.expense { color: var(--expense); }
+td.act { white-space: nowrap; text-align: right; width: 1%; }
+.pill { display: inline-block; font-size: 0.78rem; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.income { background: var(--income-soft); color: var(--income); }
+.pill.expense { background: var(--expense-soft); color: var(--expense); }
+.note { color: var(--muted); font-size: 0.85rem; }
+tr.confirming td { background: var(--expense-soft); }
+
+.cats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cat-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 0.85rem; }
+.chip button { border: 0; background: transparent; padding: 2px 6px; border-radius: 999px; color: var(--muted); font-size: 0.8rem; }
+.chip button:hover { color: var(--fg); background: var(--line); }
+.chip input { width: 9em; padding: 2px 6px; }
+.cat-add { display: flex; gap: 6px; margin-top: 8px; }
+.banner { background: var(--surface-2); border-radius: var(--radius); padding: 10px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 0.9rem; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 10; }
+
+@media (max-width: 860px) {
+  .grid2, .cats { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .stats { grid-template-columns: minmax(0, 1fr); }
+  form.entry-form, .goal-form { grid-template-columns: minmax(0, 1fr); }
+  .col-note { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Учёт доходов и расходов</h1>
+      <p>Все суммы в узбекских сумах. Данные хранятся в этом браузере.</p>
+    </div>
+    <div class="controls">
+      <div>
+        <span class="lbl" id="themeLbl">Тема</span>
+        <div class="seg" role="group" aria-labelledby="themeLbl">
+          <button type="button" data-theme-btn="auto" aria-pressed="true">Авто</button>
+          <button type="button" data-theme-btn="light" aria-pressed="false">Светлая</button>
+          <button type="button" data-theme-btn="dark" aria-pressed="false">Тёмная</button>
+        </div>
+      </div>
+      <div>
+        <label class="lbl" for="period">Период</label>
+        <select id="period"></select>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button type="button" role="tab" id="tabDash" data-view="dash" aria-selected="true" aria-controls="viewDash">Дашборд</button>
+    <button type="button" role="tab" id="tabSavings" data-view="savings" aria-selected="false" aria-controls="viewSavings">Накопления<span class="tab-badge num" id="tabSaved"></span></button>
+  </nav>
+
+  <div class="banner" id="demoBanner" hidden>
+    <span>В трекере есть примерные записи, чтобы было видно, как работает дашборд. Ваши собственные записи при удалении примеров останутся.</span>
+    <button id="clearDemo" type="button">Удалить примеры</button>
+  </div>
+
+  <div class="view" id="viewDash" role="tabpanel" aria-labelledby="tabDash">
+  <section class="stats" aria-label="Итоги за период">
+    <div class="stat inc"><p class="lbl">Доходы</p><div class="val num" id="sIncome">0</div><div class="sub" id="sIncomeN"></div></div>
+    <div class="stat exp"><p class="lbl">Расходы</p><div class="val num" id="sExpense">0</div><div class="sub" id="sExpenseN"></div></div>
+    <div class="stat sav"><p class="lbl">Отложено</p><div class="val num" id="sSaved">0</div><div class="sub" id="sSavedSub"></div></div>
+    <div class="stat"><p class="lbl">Свободный остаток</p><div class="val num" id="sBalance">0</div><div class="sub" id="sRate">доход − расходы − отложенное</div></div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <div class="panel-head"><h2>Доходы и расходы по месяцам</h2><span class="muted" style="font-size:.85rem">последние 6 месяцев</span></div>
+      <div class="chart-box"><canvas id="barChart" aria-label="Столбчатая диаграмма доходов и расходов по месяцам"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Структура</h2>
+        <div class="seg" role="group" aria-label="Тип для диаграммы">
+          <button type="button" data-type="expense" data-pie="expense" aria-pressed="true">Расходы</button>
+          <button type="button" data-type="income" data-pie="income" aria-pressed="false">Доходы</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="pieChart" aria-label="Круговая диаграмма по категориям"></canvas><div class="empty" id="pieEmpty" hidden>Нет записей за выбранный период</div></div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Журнал</h2>
+        <span class="muted num" id="journalCount" style="font-size:.85rem"></span>
+      </div>
+      <div class="journal-filters">
+        <select id="fType" aria-label="Фильтр по типу">
+          <option value="all">Все типы</option>
+          <option value="income">Только доходы</option>
+          <option value="expense">Только расходы</option>
+        </select>
+        <select id="fCat" aria-label="Фильтр по категории"></select>
+        <input id="fSearch" type="search" placeholder="Поиск по комментарию" aria-label="Поиск">
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Дата</th><th>Категория</th><th class="col-note">Комментарий</th><th class="amt">Сумма</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="rowsEmpty" hidden>Записей нет. Добавьте первую в форме справа.</div>
+    </div>
+
+    <div class="panel" id="formPanel">
+      <div class="panel-head">
+        <h2 id="formTitle">Новая запись</h2>
+        <div class="seg" role="group" aria-label="Тип записи">
+          <button type="button" data-type="expense" data-form="expense" aria-pressed="true">Расход</button>
+          <button type="button" data-type="income" data-form="income" aria-pressed="false">Доход</button>
+        </div>
+      </div>
+      <form id="entryForm" class="entry-form" novalidate>
+        <div class="full">
+          <label class="lbl" for="fAmount">Сумма, сум</label>
+          <input id="fAmount" inputmode="numeric" autocomplete="off" placeholder="например, 1 250 000" class="num">
+        </div>
+        <div>
+          <label class="lbl" for="fCategory">Категория</label>
+          <select id="fCategory"></select>
+        </div>
+        <div>
+          <label class="lbl" for="fDate">Дата</label>
+          <input id="fDate" type="date">
+        </div>
+        <div class="full">
+          <label class="lbl" for="fNote">Комментарий</label>
+          <input id="fNote" maxlength="120" placeholder="необязательно">
+        </div>
+        <div class="full hint" id="autoHint" hidden></div>
+        <div class="full err" id="formErr" role="alert"></div>
+        <div class="full form-actions">
+          <button class="primary" type="submit" id="submitBtn">Добавить</button>
+          <button type="button" id="cancelEdit" hidden>Отменить</button>
+        </div>
+      </form>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:4px 0;width:100%">
+      <h2>Категории</h2>
+      <div class="cats">
+        <div>
+          <label class="lbl">Доходы</label>
+          <div class="cat-list" id="catsIncome"></div>
+          <div class="cat-add"><input id="newCatIncome" placeholder="Новая категория" aria-label="Новая категория дохода"><button type="button" data-addcat="income">+</button></div>
+        </div>
+        <div>
+          <label class="lbl">Расходы</label>
+          <div class="cat-list" id="catsExpense"></div>
+          <div class="cat-add"><input id="newCatExpense" placeholder="Новая категория" aria-label="Новая категория расхода"><button type="button" data-addcat="expense">+</button></div>
+        </div>
+      </div>
+      <div class="err" id="catErr" role="alert"></div>
+    </div>
+  </section>
+  </div>
+
+  <div class="view" id="viewSavings" role="tabpanel" aria-labelledby="tabSavings" hidden>
+    <section class="stats" aria-label="Итоги по накоплениям">
+      <div class="stat sav"><p class="lbl">Всего в копилках</p><div class="val num" id="svTotal">0</div><div class="sub" id="svGoalsN"></div></div>
+      <div class="stat inc"><p class="lbl">Отложено за период</p><div class="val num" id="svIn">0</div><div class="sub" id="svInN"></div></div>
+      <div class="stat exp"><p class="lbl">Снято за период</p><div class="val num" id="svOut">0</div><div class="sub" id="svOutN"></div></div>
+      <div class="stat"><p class="lbl">Доля от дохода</p><div class="val num" id="svRate">0%</div><div class="sub" id="svRateSub"></div></div>
+    </section>
+
+    <section class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h2>Копилки</h2><span class="muted" style="font-size:.85rem" id="goalsCount"></span></div>
+        <div class="goals" id="goals"></div>
+        <div class="empty" id="goalsEmpty" hidden>Копилок пока нет. Создайте первую, например «Подушка безопасности».</div>
+        <form id="goalForm" class="goal-form" novalidate>
+          <div><label class="lbl" for="gName" id="gNameLbl">Новая копилка</label><input id="gName" maxlength="40" placeholder="Название"></div>
+          <div><label class="lbl" for="gTarget">Цель, сум</label><input id="gTarget" inputmode="numeric" class="num" placeholder="необязательно"></div>
+          <div class="form-actions"><button type="submit" class="primary" id="gSubmit">Создать</button><button type="button" id="gCancel" hidden>Отменить</button></div>
+        </form>
+        <div class="err" id="gErr" role="alert"></div>
+      </div>
+
+      <div class="panel" id="opPanel">
+        <div class="panel-head">
+          <h2 id="opTitle">Новая операция</h2>
+          <div class="seg" role="group" aria-label="Тип операции">
+            <button type="button" data-type="deposit" data-op="deposit" aria-pressed="true">Отложить</button>
+            <button type="button" data-type="withdraw" data-op="withdraw" aria-pressed="false">Снять</button>
+          </div>
+        </div>
+        <form id="opForm" class="entry-form" novalidate>
+          <div class="full"><label class="lbl" for="oAmount">Сумма, сум</label><input id="oAmount" inputmode="numeric" autocomplete="off" class="num" placeholder="например, 500 000"></div>
+          <div><label class="lbl" for="oGoal">Копилка</label><select id="oGoal"></select></div>
+          <div><label class="lbl" for="oDate">Дата</label><input id="oDate" type="date"></div>
+          <div class="full"><label class="lbl" for="oNote">Комментарий</label><input id="oNote" maxlength="120" placeholder="необязательно"></div>
+          <div class="full err" id="oErr" role="alert"></div>
+          <div class="full form-actions"><button class="primary" type="submit" id="oSubmit">Отложить</button><button type="button" id="oCancel" hidden>Отменить</button></div>
+        </form>
+        <div class="rule">
+          <h2>Автоматическое откладывание</h2>
+          <label class="check" for="rEnabled"><input type="checkbox" id="rEnabled"> Откладывать часть каждого нового дохода</label>
+          <div class="rule-row">
+            <div><label class="lbl" for="rPercent">Процент от дохода</label><input id="rPercent" type="number" min="1" max="100" step="1" class="num"></div>
+            <div><label class="lbl" for="rGoal">В копилку</label><select id="rGoal"></select></div>
+          </div>
+          <p class="note" id="rNote" style="margin:0"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h2>Накопления по месяцам</h2><span class="muted" style="font-size:.85rem">последние 6 месяцев</span></div>
+        <div class="chart-box"><canvas id="savChart" aria-label="График накоплений по месяцам"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>История</h2><span class="muted num" id="opCount" style="font-size:.85rem"></span></div>
+        <select id="opFilter" aria-label="Фильтр по копилке"></select>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Дата</th><th>Копилка</th><th class="amt">Сумма</th><th></th></tr></thead>
+            <tbody id="opRows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="opEmpty" hidden>Операций за этот период нет.</div>
+        <div class="err" id="opRowsErr" role="alert"></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  const KEY = "salaryTracker.v1";
+  const MONTHS = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+  const MONTHS_SHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+  const fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+  const sum = (n) => fmt.format(Math.round(n)) + " сум";
+  const $ = (id) => document.getElementById(id);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // ---------- Storage (Read/Write) ----------
+  function defaults() {
+    return {
+      entries: [],
+      categories: {
+        income: ["Зарплата", "Премия", "Подработка", "Прочее"],
+        expense: ["Продукты", "Транспорт", "Коммунальные", "Связь и интернет", "Кафе", "Здоровье", "Одежда", "Прочее"]
+      },
+      savings: defaultSavings(),
+      demo: false
+    };
+  }
+  function defaultSavings() {
+    return { goals: [], ops: [], rule: { enabled: false, percent: 10, goalId: null } };
+  }
+  function demoData() {
+    const d = defaults();
+    d.demo = true;
+    const now = new Date();
+    const add = (mBack, day, type, amount, category, note) => {
+      const dt = new Date(now.getFullYear(), now.getMonth() - mBack, day);
+      if (dt > now) return;
+      const e = { id: uid(), type, amount, category, date: ymd(dt), note, createdAt: Date.now(), demo: true };
+      d.entries.push(e);
+      return e;
+    };
+    const sv = d.savings;
+    const cushion = { id: uid(), name: "Подушка безопасности", target: 30000000, demo: true };
+    const trip = { id: uid(), name: "Отпуск", target: 12000000, demo: true };
+    sv.goals.push(cushion, trip);
+    sv.rule = { enabled: true, percent: 10, goalId: cushion.id };
+    const op = (type, amount, goalId, date, note, extra) => sv.ops.push({ id: uid(), type, amount, goalId, date, note, createdAt: Date.now(), demo: true, ...extra });
+    for (let m = 5; m >= 0; m--) {
+      const k = 1 + (5 - m) * 0.03;
+      const salary = add(m, 5, "income", Math.round(8500000 * k / 1000) * 1000, "Зарплата", "Аванс и оклад");
+      if (salary) op("deposit", Math.round(salary.amount * 0.1), cushion.id, salary.date, "Авто 10% от дохода «Зарплата»", { sourceEntryId: salary.id, percent: 10 });
+      const tripDay = new Date(now.getFullYear(), now.getMonth() - m, 6);
+      if (tripDay <= now) op("deposit", 700000, trip.id, ymd(tripDay), "На отпуск");
+      if (m === 1) op("withdraw", 1500000, trip.id, ymd(new Date(now.getFullYear(), now.getMonth() - 1, 24)), "Авиабилеты");
+      if (m % 2 === 0) add(m, 18, "income", 1500000 + m * 250000, "Подработка", "Фриланс-заказ");
+      if (m === 2) add(m, 25, "income", 3000000, "Премия", "Квартальная премия");
+      add(m, 2, "expense", 1650000 + m * 40000, "Продукты", "Корзинка, Макро");
+      add(m, 15, "expense", 1200000 - m * 30000, "Продукты", "Рынок");
+      add(m, 7, "expense", 420000, "Транспорт", "Метро и такси");
+      add(m, 10, "expense", 680000 + (m === 4 || m === 5 ? 350000 : 0), "Коммунальные", "Газ, свет, вода");
+      add(m, 12, "expense", 150000, "Связь и интернет", "Мобильная связь и домашний интернет");
+      add(m, 20, "expense", 390000 + m * 20000, "Кафе", "Обеды и встречи");
+      if (m === 1) add(m, 22, "expense", 950000, "Одежда", "Осенняя куртка");
+      if (m === 3) add(m, 9, "expense", 560000, "Здоровье", "Аптека и анализы");
+    }
+    return d;
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && Array.isArray(s.entries) && s.categories) {
+          if (!s.savings) s.savings = defaultSavings();
+          return s;
+        }
+      }
+    } catch (e) {}
+    return demoData();
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  let state = load();
+  save();
+
+  // ---------- UI state ----------
+  let formType = "expense";
+  let editingId = null;
+  let confirmId = null;
+  let pieType = "expense";
+  let editingCat = null; // {type, name}
+
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+  function monthKey(date) { return date.slice(0, 7); }
+  function monthLabel(key) { const [y, m] = key.split("-"); return MONTHS[+m - 1] + " " + y; }
+  function inPeriod(e) { const p = $("period").value; return p === "all" || monthKey(e.date) === p; }
+
+  // ---------- Period selector ----------
+  function renderPeriods() {
+    const sel = $("period");
+    const prev = sel.value;
+    const now = new Date();
+    const keys = new Set([ymd(now).slice(0, 7)]);
+    state.entries.forEach((e) => keys.add(monthKey(e.date)));
+    state.savings.ops.forEach((o) => keys.add(monthKey(o.date)));
+    const sorted = [...keys].sort().reverse();
+    sel.innerHTML = sorted.map((k) => `<option value="${k}">${monthLabel(k)}</option>`).join("") + `<option value="all">Всё время</option>`;
+    sel.value = prev && [...sel.options].some((o) => o.value === prev) ? prev : sorted[0];
+  }
+
+  // ---------- Stats ----------
+  function renderStats() {
+    const list = state.entries.filter(inPeriod);
+    const inc = list.filter((e) => e.type === "income");
+    const exp = list.filter((e) => e.type === "expense");
+    const ti = inc.reduce((a, e) => a + e.amount, 0);
+    const te = exp.reduce((a, e) => a + e.amount, 0);
+    const ops = state.savings.ops.filter(inPeriod);
+    const saved = ops.reduce((a, o) => a + (o.type === "deposit" ? o.amount : -o.amount), 0);
+    const bal = ti - te - saved;
+    $("sSaved").textContent = sum(saved);
+    $("sSavedSub").textContent = ti > 0 ? Math.round((saved / ti) * 100) + "% дохода" : "Доходов за период нет";
+    $("sIncome").textContent = sum(ti);
+    $("sExpense").textContent = sum(te);
+    $("sBalance").textContent = (bal > 0 ? "+" : "") + sum(bal);
+    $("sBalance").style.color = bal < 0 ? "var(--expense)" : "var(--fg)";
+    $("sIncomeN").textContent = plural(inc.length, "запись", "записи", "записей");
+    $("sExpenseN").textContent = plural(exp.length, "запись", "записи", "записей");
+  }
+  function plural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    const w = m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many;
+    return n + " " + w;
+  }
+
+  // ---------- Charts ----------
+  let bar = null, pie = null;
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const short = (n) => n >= 1e6 ? (n / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + " млн" : n >= 1e3 ? Math.round(n / 1e3) + " тыс" : String(n);
+  const PIE_COLORS = ["#2f7d6a", "#d9822b", "#5a6fb3", "#c4492f", "#8c6bb1", "#3a9fb8", "#b5a23a", "#8a8f8c", "#d46a8f", "#5b8c3a"];
+
+  // Lighten (amt > 0) or darken (amt < 0) a #rrggbb color.
+  function shade(hex, amt) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    const mix = (c) => Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt));
+    return "rgb(" + mix(n >> 16) + "," + mix((n >> 8) & 255) + "," + mix(n & 255) + ")";
+  }
+  const BAR_DEPTH = (w) => Math.max(4, Math.min(12, w * 0.45));
+
+  // Extrudes each bar: a lit top face and a shaded right side face.
+  const bar3d = {
+    id: "bar3d",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      ctx.save();
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden || meta.type !== "bar") return;
+        meta.data.forEach((el) => {
+          const { x, y, base, width } = el.getProps(["x", "y", "base", "width"], true);
+          if (Math.abs(base - y) < 0.5) return;
+          const l = x - width / 2, r = x + width / 2, d = BAR_DEPTH(width), dy = d * 0.75;
+          ctx.beginPath();
+          ctx.moveTo(l, y); ctx.lineTo(r, y); ctx.lineTo(r + d, y - dy); ctx.lineTo(l + d, y - dy); ctx.closePath();
+          ctx.fillStyle = shade(ds._color, 0.3); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(r, y); ctx.lineTo(r + d, y - dy); ctx.lineTo(r + d, base - dy); ctx.lineTo(r, base); ctx.closePath();
+          ctx.fillStyle = shade(ds._color, -0.35); ctx.fill();
+        });
+      });
+      ctx.restore();
+    }
+  };
+
+  // Gives the doughnut thickness: darker copies of each slice stacked below it.
+  const pie3d = {
+    id: "pie3d",
+    beforeDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      const colors = chart.data.datasets[0].backgroundColor;
+      const depth = chart.options.layout.padding.bottom - 2;
+      const ctx = chart.ctx;
+      ctx.save();
+      for (let k = depth; k >= 1; k--) {
+        meta.data.forEach((arc, i) => {
+          if (!chart.getDataVisibility(i)) return;
+          const p = arc.getProps(["x", "y", "startAngle", "endAngle", "innerRadius", "outerRadius"], true);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y + k, p.outerRadius, p.startAngle, p.endAngle);
+          ctx.arc(p.x, p.y + k, p.innerRadius, p.endAngle, p.startAngle, true);
+          ctx.closePath();
+          ctx.fillStyle = shade(colors[i], k === depth ? -0.5 : -0.38);
+          ctx.fill();
+        });
+      }
+      ctx.restore();
+    }
+  };
+
+  function lastMonths(n) {
+    const p = $("period").value;
+    const end = p === "all" ? new Date() : new Date(+p.slice(0, 4), +p.slice(5, 7) - 1, 1);
+    const keys = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(end.getFullYear(), end.getMonth() - i, 1);
+      keys.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    }
+    return keys;
+  }
+  const monthTick = (k) => MONTHS_SHORT[+k.slice(5) - 1] + " " + k.slice(2, 4);
+  // Front face: lit from the left so the bar reads as a solid block.
+  const face = (color) => (c) => {
+    const el = c.element;
+    if (!el || !el.width) return color;
+    const g = c.chart.ctx.createLinearGradient(el.x - el.width / 2, 0, el.x + el.width / 2, 0);
+    g.addColorStop(0, shade(color, 0.12));
+    g.addColorStop(1, shade(color, -0.12));
+    return g;
+  };
+  const barDs = (label, data, color) => ({ label, data, _color: color, backgroundColor: face(color), maxBarThickness: 30, barPercentage: 0.62, categoryPercentage: 0.8, order: 2 });
+  const legend3d = (fg) => ({ position: "bottom", labels: { boxWidth: 12, boxHeight: 12, generateLabels: (ch) => ch.data.datasets.map((ds, i) => ({ text: ds.label, fillStyle: ds._color, strokeStyle: ds._color, hidden: !ch.isDatasetVisible(i), datasetIndex: i, fontColor: fg })) } });
+
+  let sav = null;
+  function renderSavChart() {
+    const fg = css("--muted"), grid = css("--line"), save = css("--save"), exp = css("--expense"), accent = css("--accent");
+    const keys = lastMonths(6);
+    const ops = state.savings.ops;
+    const per = (type) => keys.map((k) => ops.filter((o) => o.type === type && monthKey(o.date) === k).reduce((a, o) => a + o.amount, 0));
+    const cumulative = keys.map((k) => ops.filter((o) => monthKey(o.date) <= k).reduce((a, o) => a + (o.type === "deposit" ? o.amount : -o.amount), 0));
+    if (sav) sav.destroy();
+    sav = new Chart($("savChart"), {
+      type: "bar",
+      plugins: [bar3d],
+      data: {
+        labels: keys.map(monthTick),
+        datasets: [
+          barDs("Отложено", per("deposit"), save),
+          barDs("Снято", per("withdraw"), exp),
+          { type: "line", label: "Всего в копилках", data: cumulative, _color: accent, borderColor: accent, backgroundColor: accent, borderWidth: 3, pointRadius: 4, pointHoverRadius: 6, tension: 0.3, yAxisID: "y1", order: 1 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        layout: { padding: { top: 12, right: 12 } },
+        plugins: { legend: legend3d(fg), tooltip: { callbacks: { label: (c) => " " + c.dataset.label + ": " + sum(c.parsed.y) } } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grace: "6%", grid: { color: grid }, border: { display: false }, ticks: { callback: (v) => short(v) } },
+          y1: { position: "right", beginAtZero: true, grace: "6%", grid: { display: false }, border: { display: false }, ticks: { callback: (v) => short(v) } }
+        }
+      }
+    });
+  }
+
+  function renderCharts() {
+    if (!window.Chart) return;
+    Chart.defaults.font.family = css("--font-body");
+    Chart.defaults.color = css("--muted");
+    if (!$("viewSavings").hidden) renderSavChart();
+    if ($("viewDash").hidden) return;
+    const fg = css("--muted"), grid = css("--line"), inc = css("--income"), exp = css("--expense");
+    Chart.defaults.font.family = css("--font-body");
+    Chart.defaults.color = fg;
+
+    const keys = lastMonths(6);
+    const totals = (type) => keys.map((k) => state.entries.filter((e) => e.type === type && monthKey(e.date) === k).reduce((a, e) => a + e.amount, 0));
+    const labels = keys.map(monthTick);
+    const barData = { labels, datasets: [barDs("Доходы", totals("income"), inc), barDs("Расходы", totals("expense"), exp)] };
+    const tip = { callbacks: { label: (c) => " " + c.dataset.label + ": " + sum(c.parsed.y ?? c.parsed) } };
+    if (bar) bar.destroy();
+    bar = new Chart($("barChart"), {
+      type: "bar",
+      data: barData,
+      plugins: [bar3d],
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        layout: { padding: { top: 12, right: 12 } },
+        plugins: {
+          legend: legend3d(fg),
+          tooltip: tip
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grace: "6%", grid: { color: grid }, border: { display: false }, ticks: { callback: (v) => short(v) } }
+        }
+      }
+    });
+
+    const list = state.entries.filter((e) => inPeriod(e) && e.type === pieType);
+    const byCat = {};
+    list.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    if (pie) { pie.destroy(); pie = null; }
+    $("pieEmpty").hidden = cats.length > 0;
+    $("pieChart").hidden = cats.length === 0;
+    if (cats.length) {
+      const total = cats.reduce((a, c) => a + c[1], 0);
+      pie = new Chart($("pieChart"), {
+        type: "doughnut",
+        plugins: [pie3d],
+        data: { labels: cats.map((c) => c[0]), datasets: [{ data: cats.map((c) => c[1]), backgroundColor: cats.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]), borderColor: cats.map((_, i) => shade(PIE_COLORS[i % PIE_COLORS.length], 0.25)), borderWidth: 1, hoverOffset: 6 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false, cutout: "55%",
+          layout: { padding: { top: 6, bottom: 16 } },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10 } },
+            tooltip: { callbacks: { label: (c) => " " + c.label + ": " + sum(c.parsed) + " (" + Math.round((c.parsed / total) * 100) + "%)" } }
+          }
+        }
+      });
+    }
+  }
+
+  // ---------- Journal (Read / Update / Delete) ----------
+  function renderFilterCats() {
+    const sel = $("fCat");
+    const prev = sel.value || "all";
+    const all = [...new Set([...state.categories.income, ...state.categories.expense, ...state.entries.map((e) => e.category)])];
+    sel.innerHTML = `<option value="all">Все категории</option>` + all.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    sel.value = all.includes(prev) ? prev : "all";
+  }
+  function renderRows() {
+    const t = $("fType").value, c = $("fCat").value, q = $("fSearch").value.trim().toLowerCase();
+    const list = state.entries
+      .filter(inPeriod)
+      .filter((e) => (t === "all" || e.type === t) && (c === "all" || e.category === c) && (!q || (e.note || "").toLowerCase().includes(q) || e.category.toLowerCase().includes(q)))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    $("journalCount").textContent = plural(list.length, "запись", "записи", "записей");
+    $("rowsEmpty").hidden = list.length > 0;
+    $("rows").innerHTML = list.map((e) => {
+      const [y, m, d] = e.date.split("-");
+      const sign = e.type === "income" ? "+" : "−";
+      if (confirmId === e.id) {
+        const linked = state.savings.ops.some((o) => o.sourceEntryId === e.id);
+        return `<tr class="confirming"><td colspan="3">Удалить «${esc(e.category)}» на ${sum(e.amount)}?${linked ? " Автоматически отложенная с него сумма тоже удалится." : ""}</td><td></td><td class="act">
+          <button type="button" class="danger" data-del-yes="${e.id}">Удалить</button>
+          <button type="button" class="ghost" data-del-no>Нет</button></td></tr>`;
+      }
+      return `<tr>
+        <td class="num">${d}.${m}.${y}</td>
+        <td><span class="pill ${e.type}">${esc(e.category)}</span></td>
+        <td class="col-note note">${esc(e.note || "")}</td>
+        <td class="amt num ${e.type}">${sign} ${sum(e.amount)}</td>
+        <td class="act"><button type="button" class="ghost" data-edit="${e.id}" aria-label="Изменить">Изменить</button><button type="button" class="ghost danger" data-del="${e.id}" aria-label="Удалить">Удалить</button></td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ---------- Form (Create / Update) ----------
+  function setFormType(type) {
+    formType = type;
+    document.querySelectorAll("[data-form]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.form === type)));
+    const sel = $("fCategory"), prev = sel.value;
+    sel.innerHTML = state.categories[type].map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    if (state.categories[type].includes(prev)) sel.value = prev;
+  }
+  function parseAmount(s) {
+    const clean = String(s).replace(/[\s ]/g, "").replace(",", ".");
+    if (!/^\d+(\.\d+)?$/.test(clean)) return NaN;
+    return Math.round(parseFloat(clean));
+  }
+  function formatAmountInput(ev) {
+    const el = ev && ev.target ? ev.target : $("fAmount");
+    const digits = el.value.replace(/\D/g, "");
+    el.value = digits ? fmt.format(+digits) : "";
+  }
+  function resetForm() {
+    editingId = null;
+    $("entryForm").reset();
+    $("fDate").value = ymd(new Date());
+    $("formTitle").textContent = "Новая запись";
+    $("submitBtn").textContent = "Добавить";
+    $("cancelEdit").hidden = true;
+    $("formErr").textContent = "";
+    setFormType(formType);
+    updateAutoHint();
+  }
+  function startEdit(id) {
+    const e = state.entries.find((x) => x.id === id);
+    if (!e) return;
+    editingId = id;
+    if (!state.categories[e.type].includes(e.category)) state.categories[e.type].push(e.category);
+    setFormType(e.type);
+    $("fAmount").value = fmt.format(e.amount);
+    $("fCategory").value = e.category;
+    $("fDate").value = e.date;
+    $("fNote").value = e.note || "";
+    $("formTitle").textContent = "Изменить запись";
+    $("submitBtn").textContent = "Сохранить";
+    $("cancelEdit").hidden = false;
+    $("formErr").textContent = "";
+    $("formPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("fAmount").focus({ preventScroll: true });
+  }
+  $("entryForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const amount = parseAmount($("fAmount").value);
+    const date = $("fDate").value;
+    const category = $("fCategory").value;
+    if (!amount || amount <= 0) { $("formErr").textContent = "Введите сумму больше нуля, только цифры."; $("fAmount").focus(); return; }
+    if (!date) { $("formErr").textContent = "Укажите дату."; return; }
+    if (!category) { $("formErr").textContent = "Добавьте хотя бы одну категорию ниже."; return; }
+    const data = { type: formType, amount, category, date, note: $("fNote").value.trim() };
+    if (editingId) {
+      const e = state.entries.find((x) => x.id === editingId);
+      Object.assign(e, data); delete e.demo;
+      syncLinkedOp(e);
+      toast("Запись сохранена");
+    } else {
+      const e = { id: uid(), createdAt: Date.now(), ...data };
+      state.entries.push(e);
+      const auto = applyAutoSave(e);
+      toast(formType === "income" ? (auto ? "Доход добавлен, отложено " + sum(auto) : "Доход добавлен") : "Расход добавлен");
+    }
+    save();
+    resetForm();
+    renderAll();
+  });
+  $("fAmount").addEventListener("input", (ev) => { formatAmountInput(ev); updateAutoHint(); });
+  $("cancelEdit").addEventListener("click", resetForm);
+  document.querySelectorAll("[data-form]").forEach((b) => b.addEventListener("click", () => { setFormType(b.dataset.form); updateAutoHint(); }));
+  document.querySelectorAll("[data-pie]").forEach((b) => b.addEventListener("click", () => {
+    pieType = b.dataset.pie;
+    document.querySelectorAll("[data-pie]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderCharts();
+  }));
+
+  $("rows").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.edit) startEdit(b.dataset.edit);
+    else if (b.dataset.del) { confirmId = b.dataset.del; renderRows(); }
+    else if (b.dataset.delYes) {
+      state.entries = state.entries.filter((e) => e.id !== b.dataset.delYes);
+      state.savings.ops = state.savings.ops.filter((o) => o.sourceEntryId !== b.dataset.delYes);
+      if (editingId === b.dataset.delYes) resetForm();
+      confirmId = null; save(); renderAll(); toast("Запись удалена");
+    } else if ("delNo" in b.dataset) { confirmId = null; renderRows(); }
+  });
+
+  // ---------- Categories (CRUD) ----------
+  function renderCats() {
+    ["income", "expense"].forEach((type) => {
+      const box = $(type === "income" ? "catsIncome" : "catsExpense");
+      box.innerHTML = state.categories[type].map((c) => {
+        if (editingCat && editingCat.type === type && editingCat.name === c) {
+          return `<span class="chip"><input id="catEditInput" value="${esc(c)}" aria-label="Новое название"><button type="button" data-cat-save>OK</button><button type="button" data-cat-cancel>×</button></span>`;
+        }
+        return `<span class="chip">${esc(c)}<button type="button" data-cat-rename="${esc(c)}" data-cat-type="${type}" aria-label="Переименовать ${esc(c)}">✎</button><button type="button" data-cat-del="${esc(c)}" data-cat-type="${type}" aria-label="Удалить ${esc(c)}">×</button></span>`;
+      }).join("");
+    });
+    const inp = $("catEditInput");
+    if (inp) { inp.focus(); inp.select(); }
+  }
+  function addCat(type) {
+    const input = $(type === "income" ? "newCatIncome" : "newCatExpense");
+    const name = input.value.trim();
+    $("catErr").textContent = "";
+    if (!name) return;
+    if (state.categories[type].some((c) => c.toLowerCase() === name.toLowerCase())) { $("catErr").textContent = "Такая категория уже есть."; return; }
+    state.categories[type].push(name);
+    input.value = "";
+    save(); renderAll(); toast("Категория добавлена");
+  }
+  function saveCatRename() {
+    const name = ($("catEditInput").value || "").trim();
+    const { type, name: old } = editingCat;
+    $("catErr").textContent = "";
+    if (!name) { $("catErr").textContent = "Название не может быть пустым."; return; }
+    if (name !== old && state.categories[type].some((c) => c.toLowerCase() === name.toLowerCase())) { $("catErr").textContent = "Такая категория уже есть."; return; }
+    state.categories[type] = state.categories[type].map((c) => (c === old ? name : c));
+    state.entries.forEach((e) => { if (e.type === type && e.category === old) e.category = name; });
+    editingCat = null;
+    save(); renderAll(); toast("Категория переименована");
+  }
+  document.querySelector(".cats").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    $("catErr").textContent = "";
+    if (b.dataset.addcat) addCat(b.dataset.addcat);
+    else if (b.dataset.catRename) { editingCat = { type: b.dataset.catType, name: b.dataset.catRename }; renderCats(); }
+    else if ("catSave" in b.dataset) saveCatRename();
+    else if ("catCancel" in b.dataset) { editingCat = null; renderCats(); }
+    else if (b.dataset.catDel) {
+      const type = b.dataset.catType, name = b.dataset.catDel;
+      const used = state.entries.filter((e) => e.type === type && e.category === name).length;
+      if (used) { $("catErr").textContent = `Категория «${name}» используется в ${plural(used, "записи", "записях", "записях")}. Сначала измените или удалите эти записи.`; return; }
+      state.categories[type] = state.categories[type].filter((c) => c !== name);
+      save(); renderAll(); toast("Категория удалена");
+    }
+  });
+  document.querySelector(".cats").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    if (ev.target.id === "catEditInput") saveCatRename();
+    else if (ev.target.id === "newCatIncome") addCat("income");
+    else if (ev.target.id === "newCatExpense") addCat("expense");
+  });
+
+  // ---------- Savings: helpers ----------
+  const goalById = (id) => state.savings.goals.find((g) => g.id === id);
+  const signed = (o) => (o.type === "deposit" ? o.amount : -o.amount);
+  const goalBalance = (id, skipOpId) => state.savings.ops.filter((o) => o.goalId === id && o.id !== skipOpId).reduce((a, o) => a + signed(o), 0);
+  const totalSaved = () => state.savings.ops.reduce((a, o) => a + signed(o), 0);
+
+  // Auto rule: a share of each new income goes straight into the chosen goal.
+  function applyAutoSave(entry) {
+    const r = state.savings.rule;
+    if (!r.enabled || entry.type !== "income") return 0;
+    const g = goalById(r.goalId);
+    if (!g) return 0;
+    const amount = Math.round((entry.amount * r.percent) / 100);
+    if (amount <= 0) return 0;
+    state.savings.ops.push({ id: uid(), type: "deposit", amount, goalId: g.id, date: entry.date, note: `Авто ${r.percent}% от дохода «${entry.category}»`, createdAt: Date.now(), sourceEntryId: entry.id, percent: r.percent });
+    return amount;
+  }
+  // Keeps an auto deposit in step when its income is edited.
+  function syncLinkedOp(entry) {
+    const op = state.savings.ops.find((o) => o.sourceEntryId === entry.id);
+    if (!op) return;
+    if (entry.type !== "income") { state.savings.ops = state.savings.ops.filter((o) => o !== op); return; }
+    op.amount = Math.round((entry.amount * op.percent) / 100);
+    op.date = entry.date;
+    op.note = `Авто ${op.percent}% от дохода «${entry.category}»`;
+    delete op.demo;
+  }
+  function updateAutoHint() {
+    const r = state.savings.rule, g = goalById(r.goalId), el = $("autoHint");
+    const linked = editingId && state.savings.ops.some((o) => o.sourceEntryId === editingId);
+    if (formType !== "income" || !r.enabled || !g || (editingId && !linked)) { el.hidden = true; return; }
+    const amount = parseAmount($("fAmount").value);
+    const part = amount > 0 ? sum(Math.round((amount * (linked ? state.savings.ops.find((o) => o.sourceEntryId === editingId).percent : r.percent)) / 100)) : r.percent + "%";
+    el.textContent = linked ? `Связанное откладывание пересчитается: ${part}.` : `Автоматически будет отложено ${part} в «${g.name}».`;
+    el.hidden = false;
+  }
+
+  // ---------- Savings: view switch ----------
+  function showView(v) {
+    const dash = v !== "savings";
+    $("viewDash").hidden = !dash;
+    $("viewSavings").hidden = dash;
+    $("tabDash").setAttribute("aria-selected", String(dash));
+    $("tabSavings").setAttribute("aria-selected", String(!dash));
+    try { history.replaceState(null, "", dash ? "#dash" : "#savings"); } catch (e) {}
+    renderCharts();
+  }
+  document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+
+  // ---------- Savings: render ----------
+  let opType = "deposit";
+  let editingOpId = null;
+  let opConfirmId = null;
+  let editingGoalId = null;
+  let goalConfirmId = null;
+
+  function renderSavings() {
+    const sv = state.savings;
+    const ops = sv.ops.filter(inPeriod);
+    const dep = ops.filter((o) => o.type === "deposit"), wd = ops.filter((o) => o.type === "withdraw");
+    const tin = dep.reduce((a, o) => a + o.amount, 0), tout = wd.reduce((a, o) => a + o.amount, 0);
+    const income = state.entries.filter((e) => inPeriod(e) && e.type === "income").reduce((a, e) => a + e.amount, 0);
+    const total = totalSaved();
+    $("tabSaved").textContent = total ? sum(total) : "";
+    $("svTotal").textContent = sum(total);
+    $("svGoalsN").textContent = sv.goals.length ? "в " + plural(sv.goals.length, "копилке", "копилках", "копилках") : "копилок нет";
+    $("svIn").textContent = sum(tin);
+    $("svInN").textContent = plural(dep.length, "операция", "операции", "операций");
+    $("svOut").textContent = sum(tout);
+    $("svOutN").textContent = plural(wd.length, "операция", "операции", "операций");
+    $("svRate").textContent = income > 0 ? Math.round(((tin - tout) / income) * 100) + "%" : "—";
+    $("svRateSub").textContent = income > 0 ? "из дохода " + sum(income) : "доходов за период нет";
+    renderGoals(); renderRule(); renderOpGoalSelects(); renderOpRows();
+  }
+
+  function renderGoals() {
+    const goals = state.savings.goals;
+    $("goalsEmpty").hidden = goals.length > 0;
+    $("goalsCount").textContent = goals.length ? plural(goals.length, "копилка", "копилки", "копилок") : "";
+    $("goals").innerHTML = goals.map((g) => {
+      const bal = goalBalance(g.id);
+      const n = state.savings.ops.filter((o) => o.goalId === g.id).length;
+      if (goalConfirmId === g.id) {
+        return `<div class="goal confirming"><div class="goal-name">Удалить «${esc(g.name)}»?</div>
+          <div class="sub">${n ? "Вместе с ней удалится история: " + plural(n, "операция", "операции", "операций") + "." : "Операций в копилке нет."}</div>
+          <div class="goal-actions"><button type="button" class="ghost danger" data-goal-del-yes="${g.id}">Удалить</button><button type="button" class="ghost" data-goal-del-no>Нет</button></div></div>`;
+      }
+      const pct = g.target ? Math.max(0, Math.min(100, Math.round((bal / g.target) * 100))) : null;
+      const progress = g.target
+        ? `<div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Прогресс «${esc(g.name)}»"><span style="width:${pct}%"></span></div>
+           <div class="sub num">${pct}% из ${sum(g.target)}${bal < g.target ? " · осталось " + sum(g.target - bal) : " · цель достигнута"}</div>`
+        : `<div class="sub">Без цели</div>`;
+      return `<div class="goal">
+        <div class="goal-name">${esc(g.name)}</div>
+        <div class="goal-bal num">${sum(bal)}</div>
+        ${progress}
+        <div class="goal-actions">
+          <button type="button" class="ghost" data-goal-add="${g.id}">Отложить</button>
+          <button type="button" class="ghost" data-goal-edit="${g.id}">Изменить</button>
+          <button type="button" class="ghost danger" data-goal-del="${g.id}">Удалить</button>
+        </div></div>`;
+    }).join("");
+  }
+
+  function renderRule() {
+    const r = state.savings.rule, goals = state.savings.goals;
+    $("rEnabled").checked = !!r.enabled && goals.length > 0;
+    $("rEnabled").disabled = goals.length === 0;
+    $("rPercent").value = r.percent;
+    $("rGoal").innerHTML = goals.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("");
+    if (goalById(r.goalId)) $("rGoal").value = r.goalId;
+    $("rPercent").disabled = $("rGoal").disabled = !r.enabled || goals.length === 0;
+    const g = goalById(r.goalId);
+    $("rNote").textContent = goals.length === 0
+      ? "Сначала создайте копилку."
+      : r.enabled && g
+        ? `С каждого нового дохода ${r.percent}% уходит в «${g.name}». Например, с зарплаты 10 000 000 сум отложится ${sum(100000 * r.percent)}.`
+        : "Выключено. Деньги откладываются только вручную.";
+  }
+  function saveRule() {
+    const r = state.savings.rule;
+    r.enabled = $("rEnabled").checked;
+    const pct = Math.round(+$("rPercent").value);
+    r.percent = Math.max(1, Math.min(100, pct || r.percent || 10));
+    r.goalId = $("rGoal").value || (state.savings.goals[0] && state.savings.goals[0].id) || null;
+    save(); renderRule(); updateAutoHint();
+  }
+  ["rEnabled", "rGoal"].forEach((id) => $(id).addEventListener("change", saveRule));
+  $("rPercent").addEventListener("change", saveRule);
+
+  function renderOpGoalSelects() {
+    const goals = state.savings.goals;
+    const sel = $("oGoal"), prev = sel.value;
+    sel.innerHTML = goals.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("");
+    if (goalById(prev)) sel.value = prev;
+    const f = $("opFilter"), fprev = f.value || "all";
+    f.innerHTML = `<option value="all">Все копилки</option>` + goals.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("");
+    f.value = goalById(fprev) ? fprev : "all";
+  }
+
+  function renderOpRows() {
+    const gf = $("opFilter").value || "all";
+    const list = state.savings.ops
+      .filter(inPeriod)
+      .filter((o) => gf === "all" || o.goalId === gf)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    $("opCount").textContent = plural(list.length, "операция", "операции", "операций");
+    $("opEmpty").hidden = list.length > 0;
+    $("opRows").innerHTML = list.map((o) => {
+      const [y, m, d] = o.date.split("-");
+      const g = goalById(o.goalId);
+      const name = g ? g.name : "Удалённая копилка";
+      if (opConfirmId === o.id) {
+        return `<tr class="confirming"><td colspan="3">Удалить операцию на ${sum(o.amount)}?</td><td class="act">
+          <button type="button" class="danger" data-op-del-yes="${o.id}">Удалить</button>
+          <button type="button" class="ghost" data-op-del-no>Нет</button></td></tr>`;
+      }
+      return `<tr>
+        <td class="num">${d}.${m}.${y}</td>
+        <td><span class="pill ${o.type}">${esc(name)}</span>${o.note ? `<div class="note">${esc(o.note)}</div>` : ""}</td>
+        <td class="amt num ${o.type}">${o.type === "deposit" ? "+" : "−"} ${sum(o.amount)}</td>
+        <td class="act"><button type="button" class="ghost" data-op-edit="${o.id}">Изменить</button><button type="button" class="ghost danger" data-op-del="${o.id}">Удалить</button></td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ---------- Savings: goals CRUD ----------
+  function resetGoalForm() {
+    editingGoalId = null;
+    $("goalForm").reset();
+    $("gNameLbl").textContent = "Новая копилка";
+    $("gSubmit").textContent = "Создать";
+    $("gCancel").hidden = true;
+    $("gErr").textContent = "";
+  }
+  $("gTarget").addEventListener("input", formatAmountInput);
+  $("gCancel").addEventListener("click", resetGoalForm);
+  $("goalForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = $("gName").value.trim();
+    const rawTarget = $("gTarget").value.trim();
+    const target = rawTarget ? parseAmount(rawTarget) : 0;
+    if (!name) { $("gErr").textContent = "Введите название копилки."; $("gName").focus(); return; }
+    if (rawTarget && !(target > 0)) { $("gErr").textContent = "Цель должна быть суммой больше нуля или пустой."; return; }
+    if (state.savings.goals.some((g) => g.id !== editingGoalId && g.name.toLowerCase() === name.toLowerCase())) { $("gErr").textContent = "Копилка с таким названием уже есть."; return; }
+    if (editingGoalId) {
+      const g = goalById(editingGoalId);
+      g.name = name; g.target = target || null; delete g.demo;
+      toast("Копилка сохранена");
+    } else {
+      const g = { id: uid(), name, target: target || null };
+      state.savings.goals.push(g);
+      if (!goalById(state.savings.rule.goalId)) state.savings.rule.goalId = g.id;
+      $("oGoal").value = g.id;
+      toast("Копилка создана");
+    }
+    save(); resetGoalForm(); renderAll();
+  });
+  $("goals").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.goalAdd) {
+      resetOpForm(); setOpType("deposit");
+      $("oGoal").value = b.dataset.goalAdd;
+      $("opPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("oAmount").focus({ preventScroll: true });
+    } else if (b.dataset.goalEdit) {
+      const g = goalById(b.dataset.goalEdit);
+      editingGoalId = g.id;
+      $("gName").value = g.name;
+      $("gTarget").value = g.target ? fmt.format(g.target) : "";
+      $("gNameLbl").textContent = "Название копилки";
+      $("gSubmit").textContent = "Сохранить";
+      $("gCancel").hidden = false;
+      $("gName").focus();
+    } else if (b.dataset.goalDel) { goalConfirmId = b.dataset.goalDel; renderGoals(); }
+    else if ("goalDelNo" in b.dataset) { goalConfirmId = null; renderGoals(); }
+    else if (b.dataset.goalDelYes) {
+      const id = b.dataset.goalDelYes, sv = state.savings;
+      sv.goals = sv.goals.filter((g) => g.id !== id);
+      sv.ops = sv.ops.filter((o) => o.goalId !== id);
+      if (sv.rule.goalId === id) { sv.rule.goalId = sv.goals[0] ? sv.goals[0].id : null; if (!sv.rule.goalId) sv.rule.enabled = false; }
+      if (editingGoalId === id) resetGoalForm();
+      goalConfirmId = null; save(); renderAll(); toast("Копилка удалена");
+    }
+  });
+
+  // ---------- Savings: operations CRUD ----------
+  function setOpType(t) {
+    opType = t;
+    document.querySelectorAll("[data-op]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.op === t)));
+    if (!editingOpId) $("oSubmit").textContent = t === "deposit" ? "Отложить" : "Снять";
+  }
+  function resetOpForm() {
+    editingOpId = null;
+    $("opForm").reset();
+    $("oDate").value = ymd(new Date());
+    $("opTitle").textContent = "Новая операция";
+    $("oCancel").hidden = true;
+    $("oErr").textContent = "";
+    setOpType(opType);
+    renderOpGoalSelects();
+  }
+  document.querySelectorAll("[data-op]").forEach((b) => b.addEventListener("click", () => setOpType(b.dataset.op)));
+  $("oAmount").addEventListener("input", formatAmountInput);
+  $("oCancel").addEventListener("click", resetOpForm);
+  $("opForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const amount = parseAmount($("oAmount").value);
+    const goalId = $("oGoal").value, date = $("oDate").value;
+    const g = goalById(goalId);
+    if (!g) { $("oErr").textContent = "Сначала создайте копилку слева."; return; }
+    if (!amount || amount <= 0) { $("oErr").textContent = "Введите сумму больше нуля, только цифры."; $("oAmount").focus(); return; }
+    if (!date) { $("oErr").textContent = "Укажите дату."; return; }
+    if (opType === "withdraw") {
+      const avail = goalBalance(goalId, editingOpId);
+      if (amount > avail) { $("oErr").textContent = `В копилке «${g.name}» сейчас ${sum(Math.max(0, avail))}, снять больше нельзя.`; return; }
+    }
+    const data = { type: opType, amount, goalId, date, note: $("oNote").value.trim() };
+    if (editingOpId) {
+      const o = state.savings.ops.find((x) => x.id === editingOpId);
+      const edited = o.sourceEntryId && (o.amount !== amount || o.type !== opType);
+      Object.assign(o, data); delete o.demo;
+      if (edited) { delete o.sourceEntryId; delete o.percent; }
+      toast("Операция сохранена");
+    } else {
+      state.savings.ops.push({ id: uid(), createdAt: Date.now(), ...data });
+      toast(opType === "deposit" ? "Отложено " + sum(amount) : "Снято " + sum(amount));
+    }
+    save(); resetOpForm(); renderAll();
+  });
+  $("opFilter").addEventListener("change", renderOpRows);
+  $("opRows").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    $("opRowsErr").textContent = "";
+    if (b.dataset.opEdit) {
+      const o = state.savings.ops.find((x) => x.id === b.dataset.opEdit);
+      editingOpId = o.id;
+      setOpType(o.type);
+      $("oAmount").value = fmt.format(o.amount);
+      $("oGoal").value = o.goalId;
+      $("oDate").value = o.date;
+      $("oNote").value = o.note || "";
+      $("opTitle").textContent = "Изменить операцию";
+      $("oSubmit").textContent = "Сохранить";
+      $("oCancel").hidden = false;
+      $("oErr").textContent = "";
+      $("opPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("oAmount").focus({ preventScroll: true });
+    } else if (b.dataset.opDel) {
+      const o = state.savings.ops.find((x) => x.id === b.dataset.opDel);
+      if (o.type === "deposit" && goalBalance(o.goalId) - o.amount < 0) {
+        $("opRowsErr").textContent = "Без этого пополнения баланс копилки уйдёт в минус. Сначала удалите или уменьшите снятия из неё.";
+        return;
+      }
+      opConfirmId = o.id; renderOpRows();
+    } else if ("opDelNo" in b.dataset) { opConfirmId = null; renderOpRows(); }
+    else if (b.dataset.opDelYes) {
+      state.savings.ops = state.savings.ops.filter((o) => o.id !== b.dataset.opDelYes);
+      if (editingOpId === b.dataset.opDelYes) resetOpForm();
+      opConfirmId = null; save(); renderAll(); toast("Операция удалена");
+    }
+  });
+
+  // ---------- Demo data ----------
+  $("clearDemo").addEventListener("click", () => {
+    state.entries = state.entries.filter((e) => !e.demo);
+    const sv = state.savings;
+    sv.ops = sv.ops.filter((o) => !o.demo);
+    sv.goals = sv.goals.filter((g) => !g.demo || sv.ops.some((o) => o.goalId === g.id));
+    if (!goalById(sv.rule.goalId)) { sv.rule.enabled = false; sv.rule.goalId = null; }
+    state.demo = false; save();
+    resetForm(); renderAll(); toast("Примеры удалены");
+  });
+
+  // ---------- Theme ----------
+  const THEME_KEY = "salaryTracker.theme";
+  function applyTheme(t) {
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    else document.documentElement.removeAttribute("data-theme");
+    document.querySelectorAll("[data-theme-btn]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeBtn === (t || "auto"))));
+  }
+  document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => {
+    const t = b.dataset.themeBtn;
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    applyTheme(t);
+  }));
+  let savedTheme = "auto";
+  try { savedTheme = localStorage.getItem(THEME_KEY) || "auto"; } catch (e) {}
+  applyTheme(savedTheme);
+
+  // ---------- Wiring ----------
+  $("period").addEventListener("change", () => { confirmId = null; opConfirmId = null; renderStats(); renderSavings(); renderCharts(); renderRows(); });
+  ["fType", "fCat"].forEach((id) => $(id).addEventListener("change", renderRows));
+  $("fSearch").addEventListener("input", renderRows);
+  try {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderCharts);
+    new MutationObserver(renderCharts).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  } catch (e) {}
+
+  function renderAll() {
+    $("demoBanner").hidden = !state.entries.some((e) => e.demo) && !state.savings.ops.some((o) => o.demo) && !state.savings.goals.some((g) => g.demo);
+    renderPeriods(); renderFilterCats(); renderStats(); renderSavings(); renderCharts(); renderRows(); renderCats(); setFormType(formType); updateAutoHint();
+  }
+  resetForm();
+  resetOpForm();
+  showView(location.hash === "#savings" ? "savings" : "dash");
+  renderAll();
+})();
+</script>
